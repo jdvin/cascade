@@ -1,11 +1,11 @@
 # from FallingSand import Particle
+from abc import abstractmethod
 import random
 import pygame
 
 scale = 2
 aircolor = (0, 0, 0)
 allelements = {}
-changed = {}
 (Nx, Ny) = (400, 450)
 FPS = 20
 
@@ -21,20 +21,24 @@ magenta = (211, 54, 130)
 
 
 class Particle:
-    def __init__(self, x, y, allelements, SURFACE):
+    def __init__(self, x, y):
         # allelements is a REFERENCE to a dictionary containing all element instances
         self.x = x
         self.y = y
-        self.allelements = allelements
-        self.SURFACE = SURFACE
+
+    @property
+    def color(self) -> tuple[int, int, int]:
+        return (0, 0, 0)
+
+    @abstractmethod
+    def update(self, state: dict[tuple[int, int], "Particle"]):
+        pass
 
     def checkkill(self, x, y):  # checks to see if particle can be deleted
         if not 0 <= self.x <= Nx:
-            self.draw(x, y, aircolor)  # wipe pixel
             del self.allelements[(x, y)]
             return True
         elif not 0 <= self.y <= 300:
-            self.draw(x, y, aircolor)
             del self.allelements[(x, y)]
             return True
         return False
@@ -60,23 +64,16 @@ class Particle:
         else:
             return self.allelements.get((x, y)).color
 
-    def draw(self, x, y, color):
-        self.SURFACE.fill(color, pygame.Rect(x * scale, y * scale, scale, scale))
-        return
-
     def goto(self, newx, newy, overwritechance=0.0):
-        global changed
         # SAND/WATER interaction - sand changes color and overwrites water
         if (self.color == beige or self.color == darkbeige) and self.targetcolor(
             newx, newy
         ) == blue:
             self.color = darkbeige  # CHANGE SAND COLOR TO WETSAND COLOR
-            self.draw(newx, newy, self.color)
             overwritechance = 1  # set overwrite
         # WATER/SAND interaction - sand changes color but is not overwritten by water
         if self.color == blue and self.targetcolor(newx, newy) == beige:
             self.allelements[(newx, newy)].color = darkbeige
-            self.draw(newx, newy, darkbeige)
         # WETSAND/DRYSAND interaction (wetness should spread slowly through sand)
         if (
             self.color == darkbeige
@@ -84,7 +81,6 @@ class Particle:
             and random.random() < 0.08
         ):
             self.allelements[(newx, newy)].color = darkbeige
-            self.draw(newx, newy, darkbeige)
         # LIQUID/LIQUID interaction
 
         # DEFAULT behaviour
@@ -95,15 +91,9 @@ class Particle:
             del self.allelements[
                 (oldx, oldy)
             ]  # delete current location from instance dictionary
-            # self.SURFACE.fill(aircolor, pygame.Rect(oldx*self.scale, oldy*self.scale, self.scale, self.scale))
-            self.draw(oldx, oldy, aircolor)  # delete old pixel
             (self.x, self.y) = (newx, newy)
             self.allelements[(newx, newy)] = self
-            self.draw(newx, newy, self.color)
-            # self.SURFACE.fill(self.color, pygame.Rect(newx*self.scale, newy*self.scale, self.scale, self.scale))
             # mark locations as changed
-            changed[(oldx, oldy)] = True
-            changed[(newx, newy)] = True
             return True
         return False  # otherwise return "failed" boolean
 
@@ -113,7 +103,6 @@ class Metal(Particle):  # metal just sits there and doesnt move
         self.type = "solid"
         self.color = grey
         Particle.__init__(self, x, y, allelements, SURFACE)
-        self.draw(self.x, self.y, self.color)
 
     def update(self):
         pass
@@ -124,7 +113,6 @@ class Water(Particle):  # water should flow and fall
         self.type = "liquid"
         self.color = blue
         Particle.__init__(self, x, y, allelements, SURFACE)
-        self.draw(self.x, self.y, self.color)
 
     def debug(self):  # just to check if something exists
         print("Hello world, I am water!")
@@ -162,11 +150,13 @@ class Water(Particle):  # water should flow and fall
 
 
 class Acid(Particle):  # like water, can eat through metal
-    def __init__(self, x, y, allelements, SURFACE):
+    def __init__(self, x, y, allelements):
         self.type = "liquid"
-        self.color = green
-        Particle.__init__(self, x, y, allelements, SURFACE)
-        self.draw(self.x, self.y, self.color)
+        super().__init__(x, y, allelements)
+
+    @property
+    def color(self):
+        return green
 
     def debug(self):  # just to check if something exists
         print("Hello world, I am acid!")
@@ -202,9 +192,7 @@ class Acid(Particle):  # like water, can eat through metal
             updates += 1
 
 
-class Sand(
-    Particle
-):  # sand behaves like a very viscous liquid, BUT is CLASSED as a solid
+class Sand(Particle):
     def __init__(self, x, y, allelements, SURFACE):
         self.type = "solid"
         self.color = beige
@@ -212,7 +200,6 @@ class Sand(
             0.05  # chance to behave as liquid per tick (CAN CHANGE IF WET)
         )
         Particle.__init__(self, x, y, allelements, SURFACE)
-        self.draw(self.x, self.y, self.color)
 
     def debug(self):  # just to check if something exists
         print("Hello world, I am sand!")
