@@ -1,5 +1,5 @@
 # cascade
-GameNGen Applied to falling sands.
+GameNGen applied to falling sands.
 
 Falling Sand implementation taken from https://github.com/Antiochian/Falling-Sand/tree/master
 
