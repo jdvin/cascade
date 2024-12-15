@@ -1,7 +1,6 @@
 # from FallingSand import Particle
 from abc import abstractmethod
 import random
-import pygame
 
 scale = 2
 aircolor = (0, 0, 0)
@@ -34,98 +33,61 @@ class Particle:
     def update(self, state: dict[tuple[int, int], "Particle"]):
         pass
 
-    def checkkill(self, x, y):  # checks to see if particle can be deleted
+    def checkkill(self, x, y, state):  # checks to see if particle can be deleted
         if not 0 <= self.x <= Nx:
-            del self.allelements[(x, y)]
+            del state[(x, y)]
             return True
         elif not 0 <= self.y <= 300:
-            del self.allelements[(x, y)]
+            del state[(x, y)]
             return True
         return False
 
-    def checktarget(self, x, y):
-        if (
-            self.allelements.get((x, y)) == None
-        ):  # return whatever object is at target location, or False if not
-            return True  # if space is EMPTY return TRUE
-        else:  # if space is occupied, return FALSE (used to return occupier but i nixed that functionality)
-            # return self.allelements.get( (x,y) )
-            return False
-
-    def targetcolor(
-        self, x, y
-    ):  # very similar to the above, but instead of returning boolean, returns occupier object
-        if (
-            self.allelements.get((x, y)) == None
-        ):  # return whatever object is at target location, or False if not
-            return self.allelements.get(
-                (None, None)
-            ).color  # if space is empty return NULLELEMENT
-        else:
-            return self.allelements.get((x, y)).color
-
-    def goto(self, newx, newy, overwritechance=0.0):
-        # SAND/WATER interaction - sand changes color and overwrites water
-        if (self.color == beige or self.color == darkbeige) and self.targetcolor(
-            newx, newy
-        ) == blue:
-            self.color = darkbeige  # CHANGE SAND COLOR TO WETSAND COLOR
-            overwritechance = 1  # set overwrite
-        # WATER/SAND interaction - sand changes color but is not overwritten by water
-        if self.color == blue and self.targetcolor(newx, newy) == beige:
-            self.allelements[(newx, newy)].color = darkbeige
-        # WETSAND/DRYSAND interaction (wetness should spread slowly through sand)
-        if (
-            self.color == darkbeige
-            and self.targetcolor(newx, newy) == beige
-            and random.random() < 0.08
-        ):
-            self.allelements[(newx, newy)].color = darkbeige
+    def goto(self, newx, newy, state, overwritechance=0.0):
         # LIQUID/LIQUID interaction
 
         # DEFAULT behaviour
         if (
-            self.checktarget(newx, newy)
-        ) or random.random() < overwritechance:  # go ahead with move IF space is free
+            not state.get((newx, newy)) or random.random() < overwritechance
+        ):  # go ahead with move IF space is free
             (oldx, oldy) = (self.x, self.y)
-            del self.allelements[
-                (oldx, oldy)
-            ]  # delete current location from instance dictionary
+            del state[(oldx, oldy)]  # delete current location from instance dictionary
             (self.x, self.y) = (newx, newy)
-            self.allelements[(newx, newy)] = self
+            state[(newx, newy)] = self
             # mark locations as changed
-            return True
-        return False  # otherwise return "failed" boolean
 
 
 class Metal(Particle):  # metal just sits there and doesnt move
-    def __init__(self, x, y, allelements, SURFACE):
-        self.type = "solid"
-        self.color = grey
-        Particle.__init__(self, x, y, allelements, SURFACE)
+    def __init__(self, x, y):
+        super().__init__(x, y)
 
-    def update(self):
-        pass
+    @property
+    def color(self):
+        return grey
 
 
 class Water(Particle):  # water should flow and fall
-    def __init__(self, x, y, allelements, SURFACE):
-        self.type = "liquid"
-        self.color = blue
-        Particle.__init__(self, x, y, allelements, SURFACE)
+    def __init__(self, x, y):
+        super().__init__(x, y)
 
-    def debug(self):  # just to check if something exists
-        print("Hello world, I am water!")
-        print("My color is: ", self.color)
+    @property
+    def color(self):
+        return blue
 
-    def update(self):
+    def goto(self, newx, newy, state, overwritechance=0.0):
+        target = state.get((newx, newy))
+        if isinstance(target, Sand):
+            target.is_wet = True
+
+        super().goto(newx, newy, state, overwritechance)
+
+    def update(self, state):
         """
         Water behaviour is like so: water is allowed to make 2-3 "actions" per turn
         it first tries to fall downward, with a chance to move left or right as it does so
         if it cant fall down it is then almost guaranteed to flow left or right
         if it hits a wall it will "reflect" off and move in the other direction
         """
-        if self.checkkill(self.x, self.y):
+        if self.checkkill(self.x, self.y, state):
             return
         updates = 0  # start with zero actions
         flowdirection = (
@@ -134,40 +96,35 @@ class Water(Particle):  # water should flow and fall
         if random.random() > 0.9:  # small chance to not flow at all
             flowdirection = 0  # i.e: dont flow
         while updates < 2:
-            if self.goto(self.x, self.y + 1):
+            if self.goto(self.x, self.y + 1, state):
                 updates += 1  # log one cycle as complete
-                if self.goto(self.x, self.y + 1):
+                if self.goto(self.x, self.y + 1, state):
                     updates += 1  # log one cycle as complete
             if self.goto(
-                self.x + flowdirection, self.y
+                self.x + flowdirection, self.y, state
             ):  # if space is available to go sideways
                 pass
             elif self.goto(
-                self.x - flowdirection, self.y
+                self.x - flowdirection, self.y, state
             ):  # if one side is blocked, "reflect" off other way
                 flowdirection *= -1
             updates += 0.67
 
 
 class Acid(Particle):  # like water, can eat through metal
-    def __init__(self, x, y, allelements):
-        self.type = "liquid"
-        super().__init__(x, y, allelements)
+    def __init__(self, x, y):
+        super().__init__(x, y)
 
     @property
     def color(self):
         return green
 
-    def debug(self):  # just to check if something exists
-        print("Hello world, I am acid!")
-        print("My color is: ", self.color)
-
-    def update(self):
+    def update(self, state):
         """
         ACID behaves like water but has a certain chance to eat through containing
         materials, defined in the variable "acidchance"
         """
-        if self.checkkill(self.x, self.y):
+        if self.checkkill(self.x, self.y, state):
             return
         acidchance = 0.01
         updates = 0  # start with zero actions
@@ -177,47 +134,62 @@ class Acid(Particle):  # like water, can eat through metal
         if random.random() > 0.9:  # small chance to not flow at all
             flowdirection = 0  # i.e: dont flow
         while updates < 2:
-            if self.goto(self.x, self.y + 1, acidchance):
+            if self.goto(self.x, self.y + 1, state, acidchance):
                 updates += 1  # log one cycle as complete
-                if self.goto(self.x, self.y + 1, acidchance):
+                if self.goto(self.x, self.y + 1, state, acidchance):
                     updates += 1  # log one cycle as complete
             if self.goto(
-                self.x + flowdirection, self.y, acidchance
+                self.x + flowdirection, self.y, state, acidchance
             ):  # if space is available to go sideways
                 pass
             elif self.goto(
-                self.x - flowdirection, self.y, acidchance
+                self.x - flowdirection, self.y, state, acidchance
             ):  # if one side is blocked, "reflect" off other way
                 pass
             updates += 1
 
 
 class Sand(Particle):
-    def __init__(self, x, y, allelements, SURFACE):
+    def __init__(self, x, y):
         self.type = "solid"
-        self.color = beige
+        self.is_wet = False
         self.flowchance = (
             0.05  # chance to behave as liquid per tick (CAN CHANGE IF WET)
         )
-        Particle.__init__(self, x, y, allelements, SURFACE)
+        super().__init__(x, y)
 
-    def debug(self):  # just to check if something exists
-        print("Hello world, I am sand!")
-        print("My color is: ", self.color)
+    @property
+    def color(self):
+        return darkbeige if self.is_wet else beige
 
-    def update(self):
+    def goto(self, newx, newy, state, overwritechance=0.0):
+        # SAND/WATER interaction - sand changes color and overwrites water
+        target = state.get((newx, newy))
+        if isinstance(target, Water):
+            self.is_wet = True  # CHANGE SAND COLOR TO WETSAND COLOR
+            overwritechance = 1  # set overwrite
+            # WETSAND/DRYSAND interaction (wetness should spread slowly through sand)
+        if (
+            self.is_wet
+            and isinstance(target, Sand)
+            and target.is_wet
+            and random.random() < 0.08
+        ):
+            state[(newx, newy)].is_wet = True
+        super().goto(newx, newy, state, overwritechance)
+
+    def update(self, state):
         """
         Sand is like water but it hardly ever flows sideways, and if it gets wet
         then it solidifies and becomes immovable. Wet sand slowly "infects" nearby dry sand
         (This behaviour is codified inside the goto function)
         """
-        if self.checkkill(self.x, self.y):
+        if self.checkkill(self.x, self.y, state):
             return
         updates = 0  # start with zero actions
 
-        if self.color == beige:
-            flowchance = 0.05  # 5% chanc eto flow per tick if dry
-        elif self.color == darkbeige:
+        flowchance = 0.05  # 5% chanc eto flow per tick if dry
+        if self.is_wet:
             flowchance = 0  # never flow if wet
 
         flowdirection = (
@@ -227,26 +199,15 @@ class Sand(Particle):
             flowdirection = 0  # i.e: dont flow
         while updates < 2:
             if self.goto(
-                self.x, self.y + 2
+                self.x, self.y + 2, state
             ):  # if space is available to fall down 2 spaces
                 updates += 2
-            elif self.goto(self.x, self.y + 1):
+            elif self.goto(self.x, self.y + 1, state):
                 updates += 1  # log one cycle as complete
             if self.goto(
-                self.x + flowdirection, self.y
+                self.x + flowdirection, self.y, state
             ):  # if space is available to go sideways
                 pass
             #            elif self.goto(self.x - flowdirection, self.y): #if one side is blocked, "reflect" off other way
             #                pass
             updates += 2
-
-
-class NullElement(Particle):  # this placeholder sits at (None,None) and does NOTHING
-    def __init__(self, allelements, SURFACE):
-        self.color = None
-        self.x = None
-        self.y = None
-        Particle.__init__(self, self.x, self.y, allelements, SURFACE)
-
-    def update(self):
-        pass

@@ -4,14 +4,14 @@ from typing import Any
 import pygame
 import sys
 import numpy as np
-from elements import Particle, Metal, Water, Sand, Acid, NullElement
+from elements import Particle, Metal, Water, Sand, Acid
 
 
 @dataclass
 class Config:
     width: int = 400
     height: int = 450
-    fps: int = 20
+    fps: int = 60
     scale: int = 2
     aircolor: tuple[int, int, int] = (0, 0, 0)
 
@@ -48,19 +48,19 @@ class PygameRenderer(Renderer):
 
 
 class InputHandler(ABC):
-    active_element: type[Particle]
-    pensize: int
+    active_element: type[Particle] = Metal
+    pensize: int = 1
 
     def pendraw(self, x: int, y: int, state: dict[tuple[int, int], Particle]):
         # this function places a suitable number of elements in a circle at the position specified
         if self.pensize == 0 and state.get((x, y)):
-            state[(x, y)] = self.active_element(x, y, state)  # place 1 pixel
+            state[(x, y)] = self.active_element(x, y)  # place 1 pixel
         else:
             for xdisp in range(-self.pensize, self.pensize):  # penzize is the radius
                 for ydisp in range(-self.pensize, self.pensize):
-                    if state.get((x + xdisp, y + ydisp)):
+                    if not state.get((x + xdisp, y + ydisp)):
                         state[(x + xdisp, y + ydisp)] = self.active_element(
-                            x + xdisp, y + ydisp, state
+                            x + xdisp, y + ydisp
                         )
 
     @abstractmethod
@@ -69,7 +69,6 @@ class InputHandler(ABC):
 
 
 class PygameInputHandler(InputHandler):
-
     def update(self, config: Config, state: dict[tuple[int, int], Particle]):
         for event in pygame.event.get():  # detect events
             if event.type == pygame.QUIT:  # detect attempted exit
@@ -98,10 +97,9 @@ class PygameInputHandler(InputHandler):
 
 @dataclass
 class Engine:
-    clock: pygame.time.Clock
+    config: Config
     renderer: Renderer
     input_handler: InputHandler
-    config: Config
     state: dict[tuple[int, int], Particle] = field(default_factory=dict)
 
     def __post_init__(self):
@@ -111,46 +109,21 @@ class Engine:
     def run(self):
         while True:
             self.clock.tick(self.config.fps)
-
-            for particle in self.state.values():
+            for particle in list(self.state.values()):
                 try:
-                    particle.update(state)
+                    particle.update(self.state)
                 except KeyError:
                     pass
-
             self.renderer.draw(self.state, self.config)
-
-
-def globalchecktarget(x, y):
-    if ():  # return whatever object is at target location, or False if not
-        return True  # if space is EMPTY return TRUE
-    else:  # if space is occupied, return FALSE (used to return occupier but i nixed that functionality)
-        return False  # return self.allelements.get( (x,y) )
+            self.input_handler.update(self.config, self.state)
 
 
 def main():
-
-    ###DEBUG INITIALISATION###
-    #
-    ##for x in range(50,100):
-    ##    for y in range(24,26):
-    ##        allelements[(x,y)] = Water(x,y,allelements,SURFACE)
-    #    #SURFACE.fill((255,255,255), pygame.Rect(x*scale, y*scale, scale, scale))
-    # for x in range(70, 150):  # build testing bucket
-    #     y = 150
-    #     allelements[(x, y)] = Metal(x, y, allelements, SURFACE)
-    #     allelements[(x, y + 1)] = Metal(x, y + 1, allelements, SURFACE)
-    # for y in range(138, 150):
-    #     if y in range(145, 150):
-    #         allelements[(70, y)] = Metal(70, y, allelements, SURFACE)
-    #         allelements[(80, y)] = Metal(80, y, allelements, SURFACE)
-    #     allelements[(149, y)] = Metal(149, y, allelements, SURFACE)
-
-    ##########################
-    ActiveElement = Metal  # default
-    pensize = 1
-
-    # INITIALISE NULLELEMENT
+    config = Config()
+    input_handler = PygameInputHandler()
+    renderer = PygameRenderer(config)
+    engine = Engine(config, renderer, input_handler)
+    engine.run()
 
 
 if __name__ == "__main__":
