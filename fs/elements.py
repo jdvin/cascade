@@ -24,14 +24,37 @@ class Particle:
         # allelements is a REFERENCE to a dictionary containing all element instances
         self.x = x
         self.y = y
+        self.dissolve_chance = 0.0
+        self.max_updates = 0
+        self.density = 0
+        self.flow_chance = 0.0
+        self.elasticity = 0
 
     @property
     def color(self) -> tuple[int, int, int]:
         return (0, 0, 0)
 
-    @abstractmethod
-    def update(self, state: dict[tuple[int, int], "Particle"]):
-        pass
+    def update(self, state):
+
+        if self.checkkill(self.x, self.y, state):
+            return
+        updates = 0  # start with zero actions
+        flowdirection = (
+            (random.randint(0, 1) * 2 - 1) if random.random() < self.flow_chance else 0
+        )
+        while updates < self.max_updates:
+            # Fall in proportion to density.
+            for _ in range(1, self.density + 1):
+                if self.goto(self.x, self.y + 1, state):
+                    updates += 1
+
+            if self.goto(self.x + flowdirection, self.y, state):
+                pass
+            elif self.elasticity and self.goto(
+                self.x - flowdirection * self.elasticity, self.y, state
+            ):
+                flowdirection *= -self.elasticity
+            updates += 1
 
     def checkkill(self, x, y, state):  # checks to see if particle can be deleted
         if not 0 <= self.x <= Nx:
@@ -42,18 +65,16 @@ class Particle:
             return True
         return False
 
-    def goto(self, newx, newy, state, overwritechance=0.0):
-        # LIQUID/LIQUID interaction
-
-        # DEFAULT behaviour
+    def goto(self, newx, newy, state):
         if (
-            not state.get((newx, newy)) or random.random() < overwritechance
+            not state.get((newx, newy)) or random.random() < self.dissolve_chance
         ):  # go ahead with move IF space is free
             (oldx, oldy) = (self.x, self.y)
-            del state[(oldx, oldy)]  # delete current location from instance dictionary
+            del state[(oldx, oldy)]
             (self.x, self.y) = (newx, newy)
             state[(newx, newy)] = self
-            # mark locations as changed
+            return True
+        return False
 
 
 class Metal(Particle):  # metal just sits there and doesnt move
@@ -65,104 +86,53 @@ class Metal(Particle):  # metal just sits there and doesnt move
         return grey
 
 
-class Water(Particle):  # water should flow and fall
+class Water(Particle):
     def __init__(self, x, y):
         super().__init__(x, y)
+        self.max_updates: int = 3
+        self.dissolve_chance: float = 0.0
+        self.flow_chance: float = 0.90
+        self.density: int = 2
+        self.elasticity: int = 1
 
     @property
     def color(self):
         return blue
 
-    def goto(self, newx, newy, state, overwritechance=0.0):
+    def goto(self, newx, newy, state):
         target = state.get((newx, newy))
         if isinstance(target, Sand):
             target.is_wet = True
 
-        super().goto(newx, newy, state, overwritechance)
-
-    def update(self, state):
-        """
-        Water behaviour is like so: water is allowed to make 2-3 "actions" per turn
-        it first tries to fall downward, with a chance to move left or right as it does so
-        if it cant fall down it is then almost guaranteed to flow left or right
-        if it hits a wall it will "reflect" off and move in the other direction
-        """
-        if self.checkkill(self.x, self.y, state):
-            return
-        updates = 0  # start with zero actions
-        flowdirection = (
-            random.randint(0, 1) * 2 - 1
-        )  # returns +-1, decides if particle moves left or right
-        if random.random() > 0.9:  # small chance to not flow at all
-            flowdirection = 0  # i.e: dont flow
-        while updates < 2:
-            if self.goto(self.x, self.y + 1, state):
-                updates += 1  # log one cycle as complete
-                if self.goto(self.x, self.y + 1, state):
-                    updates += 1  # log one cycle as complete
-            if self.goto(
-                self.x + flowdirection, self.y, state
-            ):  # if space is available to go sideways
-                pass
-            elif self.goto(
-                self.x - flowdirection, self.y, state
-            ):  # if one side is blocked, "reflect" off other way
-                flowdirection *= -1
-            updates += 0.67
+        return super().goto(newx, newy, state)
 
 
 class Acid(Particle):  # like water, can eat through metal
     def __init__(self, x, y):
         super().__init__(x, y)
+        self.max_updates = 2
+        self.dissolve_chance = 0.01
+        self.flow_chance = 0.9
+        self.density = 2
+        self.elasticity = 1
 
     @property
     def color(self):
         return green
 
-    def update(self, state):
-        """
-        ACID behaves like water but has a certain chance to eat through containing
-        materials, defined in the variable "acidchance"
-        """
-        if self.checkkill(self.x, self.y, state):
-            return
-        acidchance = 0.01
-        updates = 0  # start with zero actions
-        flowdirection = (
-            random.randint(0, 1) * 2 - 1
-        )  # returns +-1, decides if particle moves left or right
-        if random.random() > 0.9:  # small chance to not flow at all
-            flowdirection = 0  # i.e: dont flow
-        while updates < 2:
-            if self.goto(self.x, self.y + 1, state, acidchance):
-                updates += 1  # log one cycle as complete
-                if self.goto(self.x, self.y + 1, state, acidchance):
-                    updates += 1  # log one cycle as complete
-            if self.goto(
-                self.x + flowdirection, self.y, state, acidchance
-            ):  # if space is available to go sideways
-                pass
-            elif self.goto(
-                self.x - flowdirection, self.y, state, acidchance
-            ):  # if one side is blocked, "reflect" off other way
-                pass
-            updates += 1
-
 
 class Sand(Particle):
     def __init__(self, x, y):
-        self.type = "solid"
-        self.is_wet = False
-        self.flowchance = (
-            0.05  # chance to behave as liquid per tick (CAN CHANGE IF WET)
-        )
         super().__init__(x, y)
+        self.is_wet = False
+        self.max_updates = 2
+        self.density = 3
 
     @property
     def color(self):
         return darkbeige if self.is_wet else beige
 
-    def goto(self, newx, newy, state, overwritechance=0.0):
+    def goto(self, newx, newy, state):
         # SAND/WATER interaction - sand changes color and overwrites water
         target = state.get((newx, newy))
         if isinstance(target, Water):
@@ -176,7 +146,7 @@ class Sand(Particle):
             and random.random() < 0.08
         ):
             state[(newx, newy)].is_wet = True
-        super().goto(newx, newy, state, overwritechance)
+        return super().goto(newx, newy, state)
 
     def update(self, state):
         """
@@ -184,30 +154,7 @@ class Sand(Particle):
         then it solidifies and becomes immovable. Wet sand slowly "infects" nearby dry sand
         (This behaviour is codified inside the goto function)
         """
-        if self.checkkill(self.x, self.y, state):
-            return
-        updates = 0  # start with zero actions
 
-        flowchance = 0.05  # 5% chanc eto flow per tick if dry
-        if self.is_wet:
-            flowchance = 0  # never flow if wet
+        self.flowchance = 0.05 if not self.is_wet else 0
 
-        flowdirection = (
-            random.randint(0, 1) * 2 - 1
-        )  # returns +-1, decides if particle moves left or right
-        if random.random() > flowchance:  # LARGE chance to not flow at all for sand
-            flowdirection = 0  # i.e: dont flow
-        while updates < 2:
-            if self.goto(
-                self.x, self.y + 2, state
-            ):  # if space is available to fall down 2 spaces
-                updates += 2
-            elif self.goto(self.x, self.y + 1, state):
-                updates += 1  # log one cycle as complete
-            if self.goto(
-                self.x + flowdirection, self.y, state
-            ):  # if space is available to go sideways
-                pass
-            #            elif self.goto(self.x - flowdirection, self.y): #if one side is blocked, "reflect" off other way
-            #                pass
-            updates += 2
+        return super().update(state)

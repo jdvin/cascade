@@ -11,7 +11,7 @@ from elements import Particle, Metal, Water, Sand, Acid
 class Config:
     width: int = 400
     height: int = 450
-    fps: int = 60
+    fps: int = 30
     scale: int = 2
     aircolor: tuple[int, int, int] = (0, 0, 0)
 
