@@ -1,18 +1,10 @@
-# from FallingSand import Particle
-from abc import abstractmethod
 import random
-
-scale = 2
-aircolor = (0, 0, 0)
-allelements = {}
-(Nx, Ny) = (400, 450)
-FPS = 20
 
 yellow = (181, 137, 0)
 beige = (238, 232, 213)
 darkbeige = (171, 152, 92)
-orange = (203, 75, 22)  # orange
-blue = (38, 139, 210)  # blue
+orange = (203, 75, 22)
+blue = (38, 139, 210)
 red = (220, 50, 47)
 green = (133, 153, 0)
 grey = (88, 110, 117)
@@ -21,7 +13,6 @@ magenta = (211, 54, 130)
 
 class Particle:
     def __init__(self, x, y):
-        # allelements is a REFERENCE to a dictionary containing all element instances
         self.x = x
         self.y = y
         self.dissolve_chance = 0.0
@@ -34,11 +25,10 @@ class Particle:
     def color(self) -> tuple[int, int, int]:
         return (0, 0, 0)
 
-    def update(self, state):
-
-        if self.checkkill(self.x, self.y, state):
+    def update(self, state, config):
+        if self.checkkill(self.x, self.y, state, config):
             return
-        updates = 0  # start with zero actions
+        updates = 0
         flowdirection = (
             (random.randint(0, 1) * 2 - 1) if random.random() < self.flow_chance else 0
         )
@@ -56,30 +46,37 @@ class Particle:
                 flowdirection *= -self.elasticity
             updates += 1
 
-    def checkkill(self, x, y, state):  # checks to see if particle can be deleted
-        if not 0 <= self.x <= Nx:
+    def checkkill(self, x, y, state, config):
+        if not 0 <= self.x <= config.width:
             del state[(x, y)]
             return True
-        elif not 0 <= self.y <= 300:
+        elif not 0 <= self.y <= config.height:
             del state[(x, y)]
             return True
         return False
 
-    def goto(self, newx, newy, state):
-        if (
-            not state.get((newx, newy)) or random.random() < self.dissolve_chance
-        ):  # go ahead with move IF space is free
+    def goto(self, newx, newy, state, overwrite_chance: float = 0.0):
+        target = state.get((newx, newy))
+        if not target or random.random() < (overwrite_chance or self.dissolve_chance):
             (oldx, oldy) = (self.x, self.y)
             del state[(oldx, oldy)]
             (self.x, self.y) = (newx, newy)
             state[(newx, newy)] = self
             return True
+        elif self.density > target.density:
+            target.x, target.y = self.x, self.y
+            state[(self.x, self.y)] = target
+            self.x, self.y = newx, newy
+            state[(newx, newy)] = self
+            return True
+
         return False
 
 
 class Metal(Particle):  # metal just sits there and doesnt move
     def __init__(self, x, y):
         super().__init__(x, y)
+        self.density = 5
 
     @property
     def color(self):
@@ -99,21 +96,21 @@ class Water(Particle):
     def color(self):
         return blue
 
-    def goto(self, newx, newy, state):
+    def goto(self, newx, newy, state, overwrite_chance: float = 0.0):
         target = state.get((newx, newy))
         if isinstance(target, Sand):
             target.is_wet = True
 
-        return super().goto(newx, newy, state)
+        return super().goto(newx, newy, state, overwrite_chance)
 
 
-class Acid(Particle):  # like water, can eat through metal
+class Acid(Particle):
     def __init__(self, x, y):
         super().__init__(x, y)
         self.max_updates = 2
         self.dissolve_chance = 0.01
         self.flow_chance = 0.9
-        self.density = 2
+        self.density = 3
         self.elasticity = 1
 
     @property
@@ -132,13 +129,10 @@ class Sand(Particle):
     def color(self):
         return darkbeige if self.is_wet else beige
 
-    def goto(self, newx, newy, state):
-        # SAND/WATER interaction - sand changes color and overwrites water
+    def goto(self, newx, newy, state, overwrite_chance: float = 0.0):
         target = state.get((newx, newy))
         if isinstance(target, Water):
-            self.is_wet = True  # CHANGE SAND COLOR TO WETSAND COLOR
-            overwritechance = 1  # set overwrite
-            # WETSAND/DRYSAND interaction (wetness should spread slowly through sand)
+            self.is_wet = True
         if (
             self.is_wet
             and isinstance(target, Sand)
@@ -146,15 +140,10 @@ class Sand(Particle):
             and random.random() < 0.08
         ):
             state[(newx, newy)].is_wet = True
-        return super().goto(newx, newy, state)
+        return super().goto(newx, newy, state, overwrite_chance)
 
-    def update(self, state):
-        """
-        Sand is like water but it hardly ever flows sideways, and if it gets wet
-        then it solidifies and becomes immovable. Wet sand slowly "infects" nearby dry sand
-        (This behaviour is codified inside the goto function)
-        """
-
+    def update(self, state, config):
         self.flowchance = 0.05 if not self.is_wet else 0
+        self.density = 3 if not self.is_wet else 4
 
-        return super().update(state)
+        return super().update(state, config)

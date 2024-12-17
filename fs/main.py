@@ -11,9 +11,15 @@ from elements import Particle, Metal, Water, Sand, Acid
 class Config:
     width: int = 400
     height: int = 450
-    fps: int = 30
+    ms_per_frame: float = 1000 / 20  # 20 fps. Set to 0 to run as fast as possible.
     scale: int = 2
     aircolor: tuple[int, int, int] = (0, 0, 0)
+
+
+@dataclass
+class SimulationConfig(Config):
+    data_path: str = "data"
+    max_frames: int = 1000
 
 
 class Renderer(ABC):
@@ -45,6 +51,27 @@ class PygameRenderer(Renderer):
             )
         self.window.blit(self.surface, (0, 0))
         pygame.display.update()
+
+
+class SimulationRenderer(Renderer):
+    def __init__(self, config: SimulationConfig):
+        self.window = np.memmap(
+            dtype=np.uint8,
+            shape=(config.height, config.width, 3, config.max_frames),
+            mode="w+",
+            filename=f"{config.data_path}/frames.npy",
+        )
+        self.frame = 0
+
+    def draw(self, state: dict[tuple[int, int], Particle], config: Config):
+        for element in state.values():
+            self.window[
+                element.y : element.y + config.scale,
+                element.x : element.x + config.scale,
+                :,
+                self.frame,
+            ] = element.color
+        self.frame += 1
 
 
 class InputHandler(ABC):
@@ -107,15 +134,19 @@ class Engine:
         self.clock = pygame.time.Clock()
 
     def run(self):
+        frame_time = 0
         while True:
-            self.clock.tick(self.config.fps)
+            frame_time += self.clock.tick()
+            if frame_time < self.config.ms_per_frame:
+                self.input_handler.update(self.config, self.state)
+                continue
             for particle in list(self.state.values()):
                 try:
-                    particle.update(self.state)
+                    particle.update(self.state, self.config)
                 except KeyError:
                     pass
             self.renderer.draw(self.state, self.config)
-            self.input_handler.update(self.config, self.state)
+            frame_time = 0
 
 
 def main():
