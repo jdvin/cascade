@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+import time
 from typing import Any
+
 import pygame
 import sys
 import numpy as np
@@ -17,9 +19,53 @@ class Config:
 
 
 @dataclass
+class SimPenStrokeAction:
+    x: int
+    y: int
+    frames: int
+
+
+@dataclass
+class SimPenStroke:
+    start_delay: float
+    particle: type[Particle]
+    pen_size: int
+    path: list[SimPenStrokeAction]
+
+
+@dataclass
 class SimulationConfig(Config):
     data_path: str = "data"
     max_frames: int = 1000
+    pen_stokes: list[SimPenStroke] = [
+        SimPenStroke(
+            start_delay=1,
+            particle=Metal,
+            pen_size=2,
+            path=[
+                SimPenStrokeAction(x, y, f)
+                for x, y, f in zip(range(50, 100), range(100, 50), [1] * 50)
+            ],
+        ),
+        SimPenStroke(
+            start_delay=0,
+            particle=Metal,
+            pen_size=2,
+            path=[
+                SimPenStrokeAction(x, y, f)
+                for x, y, f in zip(range(100, 150), range(100, 50), [1] * 50)
+            ],
+        ),
+        SimPenStroke(
+            start_delay=0,
+            particle=Sand,
+            pen_size=2,
+            path=[
+                SimPenStrokeAction(x, y, f)
+                for x, y, f in zip(range(50, 150), [110] * 50, [1] * 50)
+            ],
+        ),
+    ]
 
 
 class Renderer(ABC):
@@ -75,6 +121,7 @@ class SimulationRenderer(Renderer):
 
 
 class InputHandler(ABC):
+    config: Config
     active_element: type[Particle] = Metal
     pensize: int = 1
 
@@ -91,20 +138,23 @@ class InputHandler(ABC):
                         )
 
     @abstractmethod
-    def update(self, config: Config, state: dict[tuple[int, int], Particle]):
+    def update(self, state: dict[tuple[int, int], Particle]):
         pass
 
 
 class PygameInputHandler(InputHandler):
-    def update(self, config: Config, state: dict[tuple[int, int], Particle]):
+    def __init__(self, config: Config):
+        self.config = config
+
+    def update(self, state: dict[tuple[int, int], Particle]):
         for event in pygame.event.get():  # detect events
             if event.type == pygame.QUIT:  # detect attempted exit
                 pygame.quit()
                 sys.exit()
             if pygame.mouse.get_pressed()[0]:
                 self.pendraw(
-                    int(pygame.mouse.get_pos()[0] / config.scale),
-                    int(pygame.mouse.get_pos()[1] / config.scale),
+                    int(pygame.mouse.get_pos()[0] / self.config.scale),
+                    int(pygame.mouse.get_pos()[1] / self.config.scale),
                     state,
                 )
         pressed_keys = pygame.key.get_pressed()
@@ -120,6 +170,15 @@ class PygameInputHandler(InputHandler):
         if pressed_keys[52]:
             self.pensize = 2
             self.active_element = Acid
+
+
+class SimulationInputHandler(InputHandler):
+    def __init__(self, config: SimulationConfig):
+        self.config = config
+        self.stoke_start = time
+
+    def update(self, state: dict[tuple[int, int], Particle]):
+        pass
 
 
 @dataclass
@@ -138,20 +197,20 @@ class Engine:
         while True:
             frame_time += self.clock.tick()
             if frame_time < self.config.ms_per_frame:
-                self.input_handler.update(self.config, self.state)
                 continue
             for particle in list(self.state.values()):
                 try:
                     particle.update(self.state, self.config)
                 except KeyError:
                     pass
+            self.input_handler.update(self.state)
             self.renderer.draw(self.state, self.config)
             frame_time = 0
 
 
 def main():
     config = Config()
-    input_handler = PygameInputHandler()
+    input_handler = PygameInputHandler(config)
     renderer = PygameRenderer(config)
     engine = Engine(config, renderer, input_handler)
     engine.run()

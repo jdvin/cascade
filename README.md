@@ -10,7 +10,11 @@ Falling Sand implementation taken from https://github.com/Antiochian/Falling-San
     - [ ] It can be run in 'simulation' mode whereby an arbitrary number of game instances can be computer controlled at once and have their frames recorded
         - [x] simulation renderer
         - [ ] simulation input handler
-        - [ ] multi processing 
+            - [ ] enacting of pen strokes 
+            - [ ] saving actions
+            - [ ] generating pen strokes
+            - [ ] bezier curve pen strokes and speed functions
+        - [ ] proper sim initialization and multi processing 
     - [ ] The backend can be swapped for a model that sends rending instructions to pygame
 - [ ] Construct a dataset
 - [ ] Construct a model
