@@ -22,12 +22,11 @@ class Config:
 class SimPenStrokeAction:
     x: int
     y: int
-    frames: int
+    frame_delay: int
 
 
 @dataclass
 class SimPenStroke:
-    start_delay: float
     particle: type[Particle]
     pen_size: int
     path: list[SimPenStrokeAction]
@@ -37,18 +36,16 @@ class SimPenStroke:
 class SimulationConfig(Config):
     data_path: str = "data"
     max_frames: int = 1000
-    pen_stokes: list[SimPenStroke] = [
+    pen_strokes: list[SimPenStroke] = [
         SimPenStroke(
-            start_delay=1,
             particle=Metal,
             pen_size=2,
             path=[
                 SimPenStrokeAction(x, y, f)
-                for x, y, f in zip(range(50, 100), range(100, 50), [1] * 50)
+                for x, y, f in zip(range(50, 100), range(100, 50), [10] + [1] * 49)
             ],
         ),
         SimPenStroke(
-            start_delay=0,
             particle=Metal,
             pen_size=2,
             path=[
@@ -57,7 +54,6 @@ class SimulationConfig(Config):
             ],
         ),
         SimPenStroke(
-            start_delay=0,
             particle=Sand,
             pen_size=2,
             path=[
@@ -122,18 +118,23 @@ class SimulationRenderer(Renderer):
 
 class InputHandler(ABC):
     config: Config
-    active_element: type[Particle] = Metal
-    pensize: int = 1
 
-    def pendraw(self, x: int, y: int, state: dict[tuple[int, int], Particle]):
+    def pendraw(
+        self,
+        x: int,
+        y: int,
+        state: dict[tuple[int, int], Particle],
+        pensize: int,
+        active_element: type[Particle],
+    ):
         # this function places a suitable number of elements in a circle at the position specified
-        if self.pensize == 0 and state.get((x, y)):
-            state[(x, y)] = self.active_element(x, y)  # place 1 pixel
+        if pensize == 0 and state.get((x, y)):
+            state[(x, y)] = active_element(x, y)  # place 1 pixel
         else:
-            for xdisp in range(-self.pensize, self.pensize):  # penzize is the radius
-                for ydisp in range(-self.pensize, self.pensize):
+            for xdisp in range(-pensize, pensize):  # penzize is the radius
+                for ydisp in range(-pensize, pensize):
                     if not state.get((x + xdisp, y + ydisp)):
-                        state[(x + xdisp, y + ydisp)] = self.active_element(
+                        state[(x + xdisp, y + ydisp)] = active_element(
                             x + xdisp, y + ydisp
                         )
 
@@ -145,6 +146,8 @@ class InputHandler(ABC):
 class PygameInputHandler(InputHandler):
     def __init__(self, config: Config):
         self.config = config
+        self.active_element: type[Particle] = Metal
+        self.pensize: int = 1
 
     def update(self, state: dict[tuple[int, int], Particle]):
         for event in pygame.event.get():  # detect events
@@ -156,6 +159,8 @@ class PygameInputHandler(InputHandler):
                     int(pygame.mouse.get_pos()[0] / self.config.scale),
                     int(pygame.mouse.get_pos()[1] / self.config.scale),
                     state,
+                    self.pensize,
+                    self.active_element,
                 )
         pressed_keys = pygame.key.get_pressed()
         if pressed_keys[49]:
@@ -174,11 +179,33 @@ class PygameInputHandler(InputHandler):
 
 class SimulationInputHandler(InputHandler):
     def __init__(self, config: SimulationConfig):
-        self.config = config
-        self.stoke_start = time
+        self.strokes = config.pen_strokes
+        self.stroke_idx = 0
+        self.action_idx = 0
+        self.action_frame_delay = 0
+        self.current_frame = -1
 
     def update(self, state: dict[tuple[int, int], Particle]):
-        pass
+        if self.action_idx >= len(self.strokes[self.stroke_idx].path):
+            if self.stroke_idx == len(self.strokes) - 1:
+                # We are at the end.
+                return
+            self.action_idx = 0
+            self.stroke_idx += 1
+        current_stroke = self.strokes[self.stroke_idx]
+        current_action = current_stroke.path[self.action_idx]
+        self.current_frame += 1
+        if self.current_frame < self.action_frame_delay + current_action.frame_delay:
+            return
+        self.pendraw(
+            current_action.x,
+            current_action.y,
+            state,
+            current_stroke.pen_size,
+            current_stroke.particle,
+        )
+        self.action_frame_delay += current_action.frame_delay
+        self.action_idx += 1
 
 
 @dataclass
