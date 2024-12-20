@@ -10,7 +10,7 @@ Falling Sand implementation taken from https://github.com/Antiochian/Falling-San
     - [ ] It can be run in 'simulation' mode whereby an arbitrary number of game instances can be computer controlled at once and have their frames recorded
         - [x] simulation renderer
         - [ ] simulation input handler
-            - [ ] enacting of pen strokes 
+            - [x] enacting of pen strokes 
             - [ ] saving actions
             - [ ] generating pen strokes
             - [ ] bezier curve pen strokes and speed functions

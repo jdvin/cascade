@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-import time
 from typing import Any
 
 import pygame
@@ -36,32 +35,42 @@ class SimPenStroke:
 class SimulationConfig(Config):
     data_path: str = "data"
     max_frames: int = 1000
-    pen_strokes: list[SimPenStroke] = [
-        SimPenStroke(
-            particle=Metal,
-            pen_size=2,
-            path=[
-                SimPenStrokeAction(x, y, f)
-                for x, y, f in zip(range(50, 100), range(100, 50), [10] + [1] * 49)
-            ],
-        ),
-        SimPenStroke(
-            particle=Metal,
-            pen_size=2,
-            path=[
-                SimPenStrokeAction(x, y, f)
-                for x, y, f in zip(range(100, 150), range(100, 50), [1] * 50)
-            ],
-        ),
-        SimPenStroke(
-            particle=Sand,
-            pen_size=2,
-            path=[
-                SimPenStrokeAction(x, y, f)
-                for x, y, f in zip(range(50, 150), [110] * 50, [1] * 50)
-            ],
-        ),
-    ]
+    pen_strokes: list[SimPenStroke] = field(
+        default_factory=lambda: [
+            SimPenStroke(
+                particle=Metal,
+                pen_size=2,
+                path=[
+                    SimPenStrokeAction(x, y, f)
+                    for x, y, f in zip(range(50, 100), range(50, 100), [20] + [1] * 49)
+                ],
+            ),
+            SimPenStroke(
+                particle=Metal,
+                pen_size=2,
+                path=[
+                    SimPenStrokeAction(x, y, f)
+                    for x, y, f in zip(range(100, 150), range(100, 50, -1), [1] * 50)
+                ],
+            ),
+            SimPenStroke(
+                particle=Sand,
+                pen_size=2,
+                path=[
+                    SimPenStrokeAction(x, y, f)
+                    for x, y, f in zip(range(50, 100), [40] * 50, [1] * 50)
+                ],
+            ),
+            SimPenStroke(
+                particle=Water,
+                pen_size=2,
+                path=[
+                    SimPenStrokeAction(x, y, f)
+                    for x, y, f in zip(range(100, 150), [40] * 50, [1] * 50)
+                ],
+            ),
+        ]
+    )
 
 
 class Renderer(ABC):
@@ -236,8 +245,9 @@ class Engine:
 
 
 def main():
-    config = Config()
-    input_handler = PygameInputHandler(config)
+    config = SimulationConfig()
+    # input_handler = PygameInputHandler(config)
+    input_handler = SimulationInputHandler(config)
     renderer = PygameRenderer(config)
     engine = Engine(config, renderer, input_handler)
     engine.run()
