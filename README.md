@@ -1,7 +1,7 @@
 # cascade
 [GameNGen](https://arxiv.org/abs/2408.14837) applied to falling sands.
 
-Falling Sand implementation taken from https://github.com/Antiochian/Falling-Sand/tree/master
+Falling Sand implementation adapted from https://github.com/Antiochian/Falling-Sand/tree/master
 
 ## Rough Plan:
 
@@ -9,11 +9,11 @@ Falling Sand implementation taken from https://github.com/Antiochian/Falling-San
     - [x] It can be played and the physics behaviour can be verified
     - [ ] It can be run in 'simulation' mode whereby an arbitrary number of game instances can be computer controlled at once and have their frames recorded
         - [x] simulation renderer
-        - [ ] simulation input handler
+        - [x] simulation input handler
             - [x] enacting of pen strokes 
-            - [ ] saving actions
-            - [ ] generating pen strokes
-            - [ ] bezier curve pen strokes and speed functions
+            - [x] saving actions
+            - [x] generating pen strokes
+                - bezier curve pen strokes
         - [ ] proper sim initialization and multi processing 
     - [ ] The backend can be swapped for a model that sends rending instructions to pygame
 - [ ] Construct a dataset

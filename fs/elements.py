@@ -147,3 +147,11 @@ class Sand(Particle):
         self.density = 3 if not self.is_wet else 4
 
         return super().update(state, config)
+
+
+ELEMENTS = [
+    Metal,
+    Sand,
+    Water,
+    Acid,
+]

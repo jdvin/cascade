@@ -1,76 +1,43 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
+import random
 
 import pygame
 import sys
 import numpy as np
-from elements import Particle, Metal, Water, Sand, Acid
+from elements import ELEMENTS, Particle, Metal, Water, Sand, Acid
+from utils import bezier
 
 
 @dataclass
 class Config:
     width: int = 400
-    height: int = 450
+    height: int = 400
     ms_per_frame: float = 1000 / 20  # 20 fps. Set to 0 to run as fast as possible.
     scale: int = 2
     aircolor: tuple[int, int, int] = (0, 0, 0)
 
 
 @dataclass
-class SimPenStrokeAction:
+class PenStrokeAction:
     x: int
     y: int
     frame_delay: int
 
 
 @dataclass
-class SimPenStroke:
+class PenStroke:
     particle: type[Particle]
     pen_size: int
-    path: list[SimPenStrokeAction]
+    path: list[PenStrokeAction]
 
 
 @dataclass
 class SimulationConfig(Config):
     data_path: str = "data"
     max_frames: int = 1000
-    pen_strokes: list[SimPenStroke] = field(
-        default_factory=lambda: [
-            SimPenStroke(
-                particle=Metal,
-                pen_size=2,
-                path=[
-                    SimPenStrokeAction(x, y, f)
-                    for x, y, f in zip(range(50, 100), range(50, 100), [20] + [1] * 49)
-                ],
-            ),
-            SimPenStroke(
-                particle=Metal,
-                pen_size=2,
-                path=[
-                    SimPenStrokeAction(x, y, f)
-                    for x, y, f in zip(range(100, 150), range(100, 50, -1), [1] * 50)
-                ],
-            ),
-            SimPenStroke(
-                particle=Sand,
-                pen_size=2,
-                path=[
-                    SimPenStrokeAction(x, y, f)
-                    for x, y, f in zip(range(50, 100), [40] * 50, [1] * 50)
-                ],
-            ),
-            SimPenStroke(
-                particle=Water,
-                pen_size=2,
-                path=[
-                    SimPenStrokeAction(x, y, f)
-                    for x, y, f in zip(range(100, 150), [40] * 50, [1] * 50)
-                ],
-            ),
-        ]
-    )
+    n_strokes: int = 5
 
 
 class Renderer(ABC):
@@ -108,7 +75,12 @@ class SimulationRenderer(Renderer):
     def __init__(self, config: SimulationConfig):
         self.window = np.memmap(
             dtype=np.uint8,
-            shape=(config.height, config.width, 3, config.max_frames),
+            shape=(
+                config.max_frames,
+                config.height,
+                config.width,
+                3,
+            ),
             mode="w+",
             filename=f"{config.data_path}/frames.npy",
         )
@@ -117,10 +89,10 @@ class SimulationRenderer(Renderer):
     def draw(self, state: dict[tuple[int, int], Particle], config: Config):
         for element in state.values():
             self.window[
+                self.frame,
                 element.y : element.y + config.scale,
                 element.x : element.x + config.scale,
                 :,
-                self.frame,
             ] = element.color
         self.frame += 1
 
@@ -136,11 +108,10 @@ class InputHandler(ABC):
         pensize: int,
         active_element: type[Particle],
     ):
-        # this function places a suitable number of elements in a circle at the position specified
         if pensize == 0 and state.get((x, y)):
             state[(x, y)] = active_element(x, y)  # place 1 pixel
         else:
-            for xdisp in range(-pensize, pensize):  # penzize is the radius
+            for xdisp in range(-pensize, pensize):
                 for ydisp in range(-pensize, pensize):
                     if not state.get((x + xdisp, y + ydisp)):
                         state[(x + xdisp, y + ydisp)] = active_element(
@@ -188,11 +159,36 @@ class PygameInputHandler(InputHandler):
 
 class SimulationInputHandler(InputHandler):
     def __init__(self, config: SimulationConfig):
-        self.strokes = config.pen_strokes
+        self.n_strokes = config.n_strokes
+        self.max_x = config.width / config.scale
+        self.max_y = config.height / config.scale
         self.stroke_idx = 0
         self.action_idx = 0
         self.action_frame_delay = 0
         self.current_frame = -1
+        self.actions = np.memmap(
+            dtype=np.uint8,
+            shape=(config.max_frames, 4),
+            mode="w+",
+            filename=f"{config.data_path}/actions.npy",
+        )
+        self.generate_pen_strokes()
+
+    def generate_pen_strokes(self):
+        self.strokes = []
+        for _ in range(self.n_strokes):
+            path = bezier(4, (0, self.max_x), (0, self.max_y), 0.01)
+            frame_delays = [random.randint(1, 1)] + [1] * 99
+            self.strokes.append(
+                PenStroke(
+                    particle=random.choice(ELEMENTS),
+                    pen_size=2,
+                    path=[
+                        PenStrokeAction(xy[0], xy[1], f)
+                        for xy, f in zip(path, frame_delays)
+                    ],
+                )
+            )
 
     def update(self, state: dict[tuple[int, int], Particle]):
         if self.action_idx >= len(self.strokes[self.stroke_idx].path):
@@ -213,6 +209,11 @@ class SimulationInputHandler(InputHandler):
             current_stroke.pen_size,
             current_stroke.particle,
         )
+        self.actions[self.current_frame, 0] = current_action.x
+        self.actions[self.current_frame, 1] = current_action.y
+        self.actions[self.current_frame, 2] = current_stroke.pen_size
+        self.actions[self.current_frame, 3] = ELEMENTS.index(current_stroke.particle)
+
         self.action_frame_delay += current_action.frame_delay
         self.action_idx += 1
 
