@@ -160,8 +160,8 @@ class PygameInputHandler(InputHandler):
 class SimulationInputHandler(InputHandler):
     def __init__(self, config: SimulationConfig):
         self.n_strokes = config.n_strokes
-        self.max_x = config.width / config.scale
-        self.max_y = config.height / config.scale
+        self.max_x = config.width // config.scale
+        self.max_y = config.height // config.scale
         self.stroke_idx = 0
         self.action_idx = 0
         self.action_frame_delay = 0
@@ -216,6 +216,42 @@ class SimulationInputHandler(InputHandler):
 
         self.action_frame_delay += current_action.frame_delay
         self.action_idx += 1
+
+
+def replay(path: str):
+    frames = np.load(path + "/frames.npy")
+    actions = np.load(path + "/actions.npy")
+    config = SimulationConfig()
+
+    pygame.init()
+    window = pygame.display.set_mode((config.width, config.height))
+    pygame.display.set_caption("Falling Sand Replay")
+    clock = pygame.time.Clock()
+
+    frame_idx = 0
+    frame_time = 0
+
+    while frame_idx < len(frames):
+        frame_time += clock.tick()
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                return
+
+        if frame_time < config.ms_per_frame:
+            continue
+
+        # Convert numpy array to pygame surface
+        frame = frames[frame_idx]
+        surface = pygame.surfarray.make_surface(frame)
+        window.blit(surface, (0, 0))
+        pygame.display.update()
+
+        frame_idx += 1
+        frame_time = 0
+
+    pygame.quit()
 
 
 @dataclass
