@@ -10,6 +10,18 @@ green = (133, 153, 0)
 grey = (88, 110, 117)
 magenta = (211, 54, 130)
 
+COLOURS = {
+    "yellow": yellow,
+    "beige": beige,
+    "darkbeige": darkbeige,
+    "orange": orange,
+    "blue": blue,
+    "red": red,
+    "green": green,
+    "grey": grey,
+    "magenta": magenta,
+}
+
 
 class Particle:
     def __init__(self, x, y):
