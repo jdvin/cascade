@@ -9,6 +9,7 @@ red = (220, 50, 47)
 green = (133, 153, 0)
 grey = (88, 110, 117)
 magenta = (211, 54, 130)
+black = (0, 0, 0)
 
 COLOURS = {
     "yellow": yellow,
@@ -20,6 +21,7 @@ COLOURS = {
     "green": green,
     "grey": grey,
     "magenta": magenta,
+    "black": black,
 }
 
 

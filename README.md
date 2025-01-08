@@ -14,7 +14,8 @@ Falling Sand implementation adapted from https://github.com/Antiochian/Falling-S
             - [x] saving actions
             - [x] generating pen strokes
                 - bezier curve pen strokes
-        - [ ] proper sim initialization and multi processing 
+        - [x] proper sim initialization and multi processing 
+        - [ ] data collator: from separate simuations to train and val data tensors
     - [ ] The backend can be swapped for a model that sends rending instructions to pygame
 - [ ] Construct a dataset
 - [ ] Construct a model

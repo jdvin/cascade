@@ -3,6 +3,8 @@ from dataclasses import dataclass, field
 from typing import Any
 import argparse
 import random
+import os
+from multiprocessing import Pool
 
 import pygame
 import sys
@@ -17,6 +19,7 @@ class Config:
     height: int
     ms_per_frame: float
     scale: int
+    num_sims: int
     aircolor: tuple[int, int, int]
 
 
@@ -229,6 +232,8 @@ class SimulationInputHandler(InputHandler):
         current_stroke = self.strokes[self.stroke_idx]
         current_action = current_stroke.path[self.action_idx]
         self.current_frame += 1
+        if self.current_frame == self.config.max_frames:
+            sys.exit()
         if self.current_frame < self.action_frame_delay + current_action.frame_delay:
             return
         self.pendraw(
@@ -301,6 +306,7 @@ def create_arg_parser():
         help="Milliseconds per frame (default: 50.0 for 20fps)",
     )
     parser.add_argument("--scale", type=int, default=2, help="Pixel scale factor")
+    parser.add_argument("--num-sims", type=int, default=1, help="Number of simulations")
     parser.add_argument("--aircolor", type=str, default="black", help="Air color")
     parser.add_argument(
         "--data-path", default="data", help="Path for saving/loading simulation data"
@@ -318,28 +324,24 @@ def create_arg_parser():
     return parser
 
 
-def main():
-    parser = create_arg_parser()
-    args = parser.parse_args()
-
+def create_engine(args: argparse.Namespace) -> Engine:
     config = SimulationConfig(
         width=args.width,
         height=args.height,
         ms_per_frame=args.ms_per_frame,
         scale=args.scale,
+        num_sims=args.num_sims,
         aircolor=COLOURS[args.aircolor],
-        data_path=args.data_path,
+        data_path=args.dta_path,
         max_frames=args.max_frames,
         n_strokes=args.n_strokes,
     )
-
     renderers = {
         "pygame": PygameRenderer,
         "simulation": SimulationRenderer,
         "replay": ReplayRenderer,
     }
     renderer = renderers[args.renderer](config)
-
     input_handlers = {
         "pygame": PygameInputHandler,
         "simulation": SimulationInputHandler,
@@ -349,9 +351,17 @@ def main():
     input_handler = input_handlers[
         args.input_handler if args.renderer != "replay" else "dummy"
     ](config)
+    return Engine(config, renderer, input_handler)
 
-    engine = Engine(config, renderer, input_handler)
-    engine.run()
+
+def main():
+    parser = create_arg_parser()
+    args = parser.parse_args()
+    if args.num_sims > 1:
+        with Pool(os.cpu_count()) as pool:
+            pool.map(lambda _: create_engine(args).run(), range(args.num_sims))
+    else:
+        create_engine(args).run()
 
 
 if __name__ == "__main__":
