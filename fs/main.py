@@ -77,11 +77,22 @@ class PygameRenderer(Renderer):
 
 class ReplayRenderer(Renderer):
     def __init__(self, config: SimulationConfig):
-        self.frames = np.load(config.data_path + "/frames.npy")
-        self.frame_idx = 0
-        pygame.init()
         self.window = pygame.display.set_mode((config.width, config.height))
         pygame.display.set_caption("Falling Sand Replay")
+
+        self.frames = np.memmap(
+            dtype=np.uint8,
+            shape=(
+                config.max_frames,
+                config.height,
+                config.width,
+                3,
+            ),
+            mode="r",
+            filename=f"{config.data_path}/frames.npy",
+        )
+        self.frame_idx = 0
+        self.config = config
 
     def draw(self, state: dict[tuple[int, int], Particle], config: Config):
         if self.frame_idx >= len(self.frames):
@@ -89,9 +100,9 @@ class ReplayRenderer(Renderer):
             sys.exit()
 
         frame = self.frames[self.frame_idx]
-        surface = pygame.surfarray.make_surface(frame)
+        surface = pygame.surfarray.make_surface(frame.transpose(1, 0, 2))
         self.window.blit(surface, (0, 0))
-        pygame.display.update()
+        pygame.display.flip()
         self.frame_idx += 1
 
 
@@ -204,6 +215,7 @@ class SimulationInputHandler(InputHandler):
             mode="w+",
             filename=f"{config.data_path}/actions.npy",
         )
+        self.max_frames = config.max_frames
         self.generate_pen_strokes()
 
     def generate_pen_strokes(self):
@@ -223,6 +235,9 @@ class SimulationInputHandler(InputHandler):
             )
 
     def update(self, state: dict[tuple[int, int], Particle]):
+        self.current_frame += 1
+        if self.current_frame == self.max_frames:
+            sys.exit(0)
         if self.action_idx >= len(self.strokes[self.stroke_idx].path):
             if self.stroke_idx == len(self.strokes) - 1:
                 # We are at the end.
@@ -231,9 +246,6 @@ class SimulationInputHandler(InputHandler):
             self.stroke_idx += 1
         current_stroke = self.strokes[self.stroke_idx]
         current_action = current_stroke.path[self.action_idx]
-        self.current_frame += 1
-        if self.current_frame == self.config.max_frames:
-            sys.exit()
         if self.current_frame < self.action_frame_delay + current_action.frame_delay:
             return
         self.pendraw(
@@ -324,7 +336,7 @@ def create_arg_parser():
     return parser
 
 
-def create_engine(args: argparse.Namespace) -> Engine:
+def create_engine(args: argparse.Namespace, sim_index: int = 0) -> Engine:
     config = SimulationConfig(
         width=args.width,
         height=args.height,
@@ -332,7 +344,7 @@ def create_engine(args: argparse.Namespace) -> Engine:
         scale=args.scale,
         num_sims=args.num_sims,
         aircolor=COLOURS[args.aircolor],
-        data_path=args.dta_path,
+        data_path=args.data_path,
         max_frames=args.max_frames,
         n_strokes=args.n_strokes,
     )
@@ -359,7 +371,13 @@ def main():
     args = parser.parse_args()
     if args.num_sims > 1:
         with Pool(os.cpu_count()) as pool:
-            pool.map(lambda _: create_engine(args).run(), range(args.num_sims))
+            processes = []
+            for sim_index in range(args.num_sims):
+                args.data_path = f"data/sim_{sim_index}"
+                processes.append(pool.apply_async(create_engine(args).run))
+
+            for process in processes:
+                process.get()
     else:
         create_engine(args).run()
 
