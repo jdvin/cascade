@@ -21,6 +21,7 @@ class Config:
     scale: int
     num_sims: int
     aircolor: tuple[int, int, int]
+    max_frames: int
 
 
 @dataclass
@@ -40,7 +41,6 @@ class PenStroke:
 @dataclass
 class SimulationConfig(Config):
     data_path: str
-    max_frames: int
     n_strokes: int
 
 
@@ -48,7 +48,7 @@ class Renderer(ABC):
     window: Any
 
     @abstractmethod
-    def draw(self, state: dict[tuple[int, int], Particle], config: Config):
+    def draw(self, state: dict[tuple[int, int], Particle]):
         pass
 
 
@@ -58,17 +58,19 @@ class PygameRenderer(Renderer):
         pygame.display.set_caption("Falling Sand")
         self.config = config
         self.surface = self.window.copy()
+        self.aircolor = config.aircolor
+        self.scale = config.scale
 
-    def draw(self, state: dict[tuple[int, int], Particle], config: Config):
-        self.surface.fill(config.aircolor)
+    def draw(self, state: dict[tuple[int, int], Particle]):
+        self.surface.fill(self.aircolor)
         for element in state.values():
             self.surface.fill(
                 element.color,
                 pygame.Rect(
-                    element.x * config.scale,
-                    element.y * config.scale,
-                    config.scale,
-                    config.scale,
+                    element.x * self.scale,
+                    element.y * self.scale,
+                    self.scale,
+                    self.scale,
                 ),
             )
         self.window.blit(self.surface, (0, 0))
@@ -94,7 +96,7 @@ class ReplayRenderer(Renderer):
         self.frame_idx = 0
         self.config = config
 
-    def draw(self, state: dict[tuple[int, int], Particle], config: Config):
+    def draw(self, state: dict[tuple[int, int], Particle]):
         if self.frame_idx >= len(self.frames):
             pygame.quit()
             sys.exit()
@@ -108,6 +110,7 @@ class ReplayRenderer(Renderer):
 
 class SimulationRenderer(Renderer):
     def __init__(self, config: SimulationConfig):
+        os.makedirs(config.data_path, exist_ok=True)
         self.window = np.memmap(
             dtype=np.uint8,
             shape=(
@@ -120,13 +123,14 @@ class SimulationRenderer(Renderer):
             filename=f"{config.data_path}/frames.npy",
         )
         self.frame = 0
+        self.scale = config.scale
 
-    def draw(self, state: dict[tuple[int, int], Particle], config: Config):
+    def draw(self, state: dict[tuple[int, int], Particle]):
         for element in state.values():
             self.window[
                 self.frame,
-                element.y : element.y + config.scale,
-                element.x : element.x + config.scale,
+                element.y : element.y + self.scale,
+                element.x : element.x + self.scale,
                 :,
             ] = element.color
         self.frame += 1
@@ -270,12 +274,12 @@ class Engine:
     renderer: Renderer
     input_handler: InputHandler
     state: dict[tuple[int, int], Particle] = field(default_factory=dict)
-
-    def __post_init__(self):
-        pygame.init()
-        self.clock = pygame.time.Clock()
+    clock: None | pygame.time.Clock = None
+    frame_index: int = 0
 
     def run(self):
+        pygame.init()
+        self.clock = pygame.time.Clock()
         frame_time = 0
         while True:
             frame_time += self.clock.tick()
@@ -284,11 +288,16 @@ class Engine:
             for particle in list(self.state.values()):
                 try:
                     particle.update(self.state, self.config)
-                except KeyError:
+                except KeyError as e:
+                    # A particle may get destroyed by another particle.
+                    # This is a dumb way to handle this.
                     pass
             self.input_handler.update(self.state)
-            self.renderer.draw(self.state, self.config)
+            self.renderer.draw(self.state)
             frame_time = 0
+            self.frame_index += 1
+            if self.frame_index == self.config.max_frames:
+                return
 
 
 def create_arg_parser():
@@ -326,7 +335,7 @@ def create_arg_parser():
     parser.add_argument(
         "--max-frames",
         type=int,
-        default=1000,
+        default=-1,
         help="Maximum number of frames for simulation",
     )
     parser.add_argument(

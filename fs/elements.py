@@ -78,6 +78,8 @@ class Particle:
             state[(newx, newy)] = self
             return True
         elif self.density > target.density:
+            # A denser particle will swap places with a ligheter particle.
+            # Effectively pushing it out of the way.
             target.x, target.y = self.x, self.y
             state[(self.x, self.y)] = target
             self.x, self.y = newx, newy
