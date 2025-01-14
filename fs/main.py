@@ -48,6 +48,10 @@ class Renderer(ABC):
     window: Any
 
     @abstractmethod
+    def setup(self, config: Config | SimulationConfig) -> None | pygame.time.Clock:
+        return None
+
+    @abstractmethod
     def draw(self, state: dict[tuple[int, int], Particle]):
         pass
 
@@ -60,6 +64,10 @@ class PygameRenderer(Renderer):
         self.surface = self.window.copy()
         self.aircolor = config.aircolor
         self.scale = config.scale
+
+    def setup(self, config: Config):
+        pygame.init()
+        return pygame.time.Clock()
 
     def draw(self, state: dict[tuple[int, int], Particle]):
         self.surface.fill(self.aircolor)
@@ -96,6 +104,10 @@ class ReplayRenderer(Renderer):
         self.frame_idx = 0
         self.config = config
 
+    def setup(self, config: Config):
+        pygame.init()
+        return pygame.time.Clock()
+
     def draw(self, state: dict[tuple[int, int], Particle]):
         if self.frame_idx >= len(self.frames):
             pygame.quit()
@@ -111,6 +123,12 @@ class ReplayRenderer(Renderer):
 class SimulationRenderer(Renderer):
     def __init__(self, config: SimulationConfig):
         os.makedirs(config.data_path, exist_ok=True)
+
+        self.frame = 0
+        self.scale = config.scale
+
+    def setup(self, config):
+        assert isinstance(config, SimulationConfig)
         self.window = np.memmap(
             dtype=np.uint8,
             shape=(
@@ -122,8 +140,7 @@ class SimulationRenderer(Renderer):
             mode="w+",
             filename=f"{config.data_path}/frames.npy",
         )
-        self.frame = 0
-        self.scale = config.scale
+        return None
 
     def draw(self, state: dict[tuple[int, int], Particle]):
         for element in state.values():
@@ -158,6 +175,10 @@ class InputHandler(ABC):
                         )
 
     @abstractmethod
+    def setup(self):
+        pass
+
+    @abstractmethod
     def update(self, state: dict[tuple[int, int], Particle]):
         pass
 
@@ -167,6 +188,9 @@ class PygameInputHandler(InputHandler):
         self.config = config
         self.active_element: type[Particle] = Metal
         self.pensize: int = 1
+
+    def setup(self):
+        pass
 
     def update(self, state: dict[tuple[int, int], Particle]):
         for event in pygame.event.get():  # detect events
@@ -200,6 +224,9 @@ class DummyInputHandler(InputHandler):
     def __init__(self, config: Config):
         self.config = config
 
+    def setup(self):
+        pass
+
     def update(self, state: dict[tuple[int, int], Particle]):
         pass
 
@@ -213,14 +240,18 @@ class SimulationInputHandler(InputHandler):
         self.action_idx = 0
         self.action_frame_delay = 0
         self.current_frame = -1
+        self.actions = None
+        self.max_frames = config.max_frames
+        self.data_path = config.data_path
+        self.generate_pen_strokes()
+
+    def setup(self):
         self.actions = np.memmap(
             dtype=np.uint8,
-            shape=(config.max_frames, 4),
+            shape=(self.max_frames, 4),
             mode="w+",
-            filename=f"{config.data_path}/actions.npy",
+            filename=f"{self.data_path}/actions.npy",
         )
-        self.max_frames = config.max_frames
-        self.generate_pen_strokes()
 
     def generate_pen_strokes(self):
         self.strokes = []
@@ -239,6 +270,9 @@ class SimulationInputHandler(InputHandler):
             )
 
     def update(self, state: dict[tuple[int, int], Particle]):
+        if self.actions is None:
+            self.setup()
+            assert self.actions is not None
         self.current_frame += 1
         if self.current_frame == self.max_frames:
             sys.exit(0)
@@ -278,11 +312,10 @@ class Engine:
     frame_index: int = 0
 
     def run(self):
-        pygame.init()
-        self.clock = pygame.time.Clock()
+        self.clock = self.renderer.setup(self.config)
         frame_time = 0
         while True:
-            frame_time += self.clock.tick()
+            frame_time += self.clock.tick() if self.clock else 1
             if frame_time < self.config.ms_per_frame:
                 continue
             for particle in list(self.state.values()):
