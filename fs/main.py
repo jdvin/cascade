@@ -296,7 +296,10 @@ class SimulationInputHandler(InputHandler):
         self.actions[self.current_frame, 0] = current_action.x
         self.actions[self.current_frame, 1] = current_action.y
         self.actions[self.current_frame, 2] = current_stroke.pen_size
-        self.actions[self.current_frame, 3] = ELEMENTS.index(current_stroke.particle)
+        # We want element 0 to be nothing.
+        self.actions[self.current_frame, 3] = (
+            ELEMENTS.index(current_stroke.particle) + 1
+        )
 
         self.action_frame_delay += current_action.frame_delay
         self.action_idx += 1
